@@ -1,6 +1,6 @@
 <script setup>
 import { Head, usePage, router } from '@inertiajs/vue3'
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 
 const page = usePage()
 const user = page.props.auth.user
@@ -11,11 +11,11 @@ const logout = () => {
 
 // State
 const users = [
-    { id: 1, name: 'John Doe', status: 'online', lastSeen: 'Online', lastMessage: 'Hey there! 👋', time: '10:30 AM' },
-    { id: 2, name: 'Sarah Khan', status: 'offline', lastSeen: 'Last seen 5 min ago', lastMessage: 'See you tomorrow', time: '9:45 AM' },
-    { id: 3, name: 'Alex Smith', status: 'online', lastSeen: 'Online', lastMessage: 'Great job! 🔥', time: 'Yesterday' },
-    { id: 4, name: 'Emma Watson', status: 'offline', lastSeen: 'Last seen 1 hour ago', lastMessage: 'Thanks for the update', time: 'Yesterday' },
-    { id: 5, name: 'Michael Lee', status: 'online', lastSeen: 'Online', lastMessage: 'Call me when free', time: 'Yesterday' },
+    { id: 1, name: 'John Doe', status: 'online', lastSeen: 'Online', lastMessage: 'Hey there! 👋', time: '10:30 AM', source: 'whatsapp'},
+    { id: 2, name: 'Sarah Khan', status: 'offline', lastSeen: 'Last seen 5 min ago', lastMessage: 'See you tomorrow', time: '9:45 AM', source: 'facebook' },
+    { id: 3, name: 'Alex Smith', status: 'online', lastSeen: 'Online', lastMessage: 'Great job! 🔥', time: 'Yesterday',source: 'website' },
+    { id: 4, name: 'Emma Watson', status: 'offline', lastSeen: 'Last seen 1 hour ago', lastMessage: 'Thanks for the update', time: 'Yesterday', source: 'whatsapp' },
+    { id: 5, name: 'Michael Lee', status: 'online', lastSeen: 'Online', lastMessage: 'Call me when free', time: 'Yesterday', source: 'facebook' },
 ]
 
 const selectedUser = ref(null)
@@ -94,10 +94,14 @@ const sendMessage = () => {
     
     // Scroll to bottom
     nextTick(() => {
+        if (messageInput.value) {
+            messageInput.value.style.height = 'auto'
+        }
         if (messagesContainer.value) {
             messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
         }
     })
+    
 }
 
 const handleKeyPress = (e) => {
@@ -115,6 +119,69 @@ const getInitials = (name) => {
 if (isDesktop.value && users.length > 0) {
     selectedUser.value = users[0]
 }
+
+const showAttachmentMenu = ref(false)
+
+const messageInput = ref(null)
+
+const autoResize = () => {
+    const el = messageInput.value
+
+    if (!el) return
+
+    el.style.height = 'auto'
+
+    const maxHeight = 192 // ~8 lines
+
+    if (el.scrollHeight > maxHeight) {
+        el.style.height = maxHeight + 'px'
+        el.style.overflowY = 'auto'
+    } else {
+        el.style.height = el.scrollHeight + 'px'
+        el.style.overflowY = 'hidden'
+    }
+}
+
+// Time
+const currentTime = ref('')
+const currentDate = ref('')
+
+let clockInterval = null
+
+const updateClock = () => {
+    const now = new Date()
+
+    let hours = now.getHours()
+    const minutes = String(now.getMinutes()).padStart(2, '0')
+    const seconds = String(now.getSeconds()).padStart(2, '0')
+
+    const ampm = hours >= 12 ? 'PM' : 'AM'
+
+    hours = hours % 12
+    hours = hours ? hours : 12
+
+    // 09, 08, 07 format
+    const formattedHours = String(hours).padStart(2, '0')
+
+    currentTime.value = `${formattedHours}:${minutes}:${seconds} ${ampm}`
+
+    currentDate.value = now.toLocaleDateString('en-US', {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+    })
+}
+
+onMounted(() => {
+    updateClock()
+    clockInterval = setInterval(updateClock, 1000)
+})
+
+onUnmounted(() => {
+    clearInterval(clockInterval)
+})
+
 </script>
 
 <template>
@@ -131,15 +198,31 @@ if (isDesktop.value && users.length > 0) {
                 <div class="font-semibold text-gray-800">
                     OmniInbox
                 </div>
-            </div>
+                <div
+                    class="hidden xl:flex items-center ml-4 px-4 py-2 rounded-xl bg-gradient-to-r from-slate-900 via-blue-900 to-slate-900 text-white shadow-lg"
+                >
+                    <div class="flex flex-col items-center">
+                        <span
+                            class="font-mono text-lg font-bold tracking-wider text-center w-[140px]"
+                        >
+                            {{ currentTime }}
+                        </span>
 
+                        <span
+                            class="font-mono text-[11px] text-blue-200 text-center whitespace-nowrap"
+                        >
+                            {{ currentDate }}
+                        </span>
+                    </div>
+                </div>
+            </div>
             <div class="flex items-center gap-3">
+                <div class="h-8 w-8 rounded-full bg-gradient-to-br from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white text-sm font-semibold shadow-lg ring-2 ring-white/20">
+                    {{ getInitials(user.name) }}
+                </div>
                 <div class="text-sm text-gray-700 font-medium hidden sm:block">
                     {{ user.name }}
-                </div>
-                <div class="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-grey text-sm font-semibold">
-                    {{ user.name }}
-                </div>
+                </div>                
                 <button
                     @click="logout"
                     class="text-sm px-3 py-1.5 rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-medium"
@@ -151,7 +234,6 @@ if (isDesktop.value && users.length > 0) {
 
         <!-- MAIN CONTENT -->
         <div class="flex flex-1 overflow-hidden bg-white">
-            
             <!-- DESKTOP LAYOUT: Sidebar always visible + Chat always visible -->
             <template v-if="isDesktop">
                 <!-- User List Sidebar -->
@@ -179,7 +261,7 @@ if (isDesktop.value && users.length > 0) {
                                 :class="selectedUser?.id === u.id ? 'bg-blue-100 border-l-4 border-blue-500' : 'hover:bg-gray-50'"
                             >
                                 <div class="relative flex-shrink-0">
-                                    <div class="h-12 w-12 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-gray-700 font-semibold">
+                                    <div class="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white font-semibold">
                                         {{ getInitials(u.name) }}
                                     </div>
                                     <span
@@ -193,7 +275,29 @@ if (isDesktop.value && users.length > 0) {
                                         <div class="text-sm font-semibold text-gray-900 truncate">
                                             {{ u.name }}
                                         </div>
-                                        <div class="text-xs text-gray-400">{{ u.time }}</div>
+                                        <div class="flex items-center gap-2">
+                                            <div
+                                                v-if="u.source === 'whatsapp'"
+                                                class="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center"
+                                            >
+                                                <i class="fa-brands fa-whatsapp text-green-600 text-sm"></i>
+                                            </div>
+        
+                                            <div
+                                                v-else-if="u.source === 'facebook'"
+                                                class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center"
+                                            >
+                                                <i class="fa-brands fa-facebook-messenger text-blue-600 text-sm"></i>
+                                            </div>
+        
+                                            <div
+                                                v-else
+                                                class="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center"
+                                            >
+                                                <i class="fa-solid fa-globe text-slate-600 text-xs"></i>
+                                            </div>
+                                            <div class="text-xs text-gray-400">{{ u.time }}</div>
+                                        </div>
                                     </div>
                                     <div class="text-xs text-gray-500 truncate">
                                         {{ u.lastMessage }}
@@ -205,36 +309,62 @@ if (isDesktop.value && users.length > 0) {
                 </div>
 
                 <!-- Chat Area (Desktop) -->
-                <div class="flex-1 flex flex-col bg-gray-50">
+                <div class="flex-1 flex flex-col bg-gray-50" style="background-image: url('/assets/images/chatbg.png'); background-repeat: repeat; background-size: 400px; background-color: #f8f9fb;">
                     <div v-if="selectedUser" class="flex flex-col h-full">
                         <!-- Chat Header -->
                         <div class="flex items-center gap-3 px-4 py-3 border-b bg-white">
                             <div class="relative">
-                                <div class="h-10 w-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-black font-semibold">
+                                <div class="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white font-semibold">
                                     {{ getInitials(selectedUser.name) }}
                                 </div>
                                 <span
                                     v-if="selectedUser.status === 'online'"
                                     class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-white"
                                 ></span>
-                            </div>
-                            <div>
+                            </div>                            
+                            <div class="flex-1">
                                 <div class="text-sm font-semibold text-gray-900">{{ selectedUser.name }}</div>
                                 <div class="text-xs" :class="selectedUser.status === 'online' ? 'text-green-500' : 'text-gray-400'">
                                     {{ selectedUser.status === 'online' ? 'Online' : 'Offline' }}
                                 </div>
                             </div>
+                            
+                            <div class="flex items-center gap-1">
+                                <button class="p-2 rounded-full hover:bg-gray-100"
+                                    v-if="selectedUser.source === 'whatsapp'"                                    
+                                >
+                                    <i class="fa-brands fa-whatsapp text-green-600"></i>
+                                </button>
+
+                                <button class="p-2 rounded-full hover:bg-gray-100"
+                                    v-else-if="selectedUser.source === 'facebook'"                                
+                                >
+                                    <i class="fa-brands fa-facebook-messenger text-blue-600"></i>
+                                </button>
+
+                                <button class="p-2 rounded-full hover:bg-gray-100"
+                                    v-else                                    
+                                >
+                                    <i class="fa-solid fa-globe text-slate-600"></i>
+                                </button>
+                                <button class="p-2 rounded-full hover:bg-gray-100">
+                                    <i class="fa-solid fa-phone text-gray-600"></i>
+                                </button>
+                                <button class="p-2 rounded-full hover:bg-gray-100">
+                                    <i class="fa-solid fa-video text-gray-600"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Messages -->
-                        <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll bg-gradient-to-b from-gray-50 to-gray-100">
+                        <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
                             <div
                                 v-for="m in currentMessages"
                                 :key="m.id"
                                 class="flex"
                                 :class="m.from === 'me' ? 'justify-end' : 'justify-start'"
                             >
-                                <div class="flex items-end gap-1 max-w-[70%]">
+                                <div class=" max-w-[70%]">
                                     <div
                                         class="px-4 py-2 rounded-2xl text-sm"
                                         :class="m.from === 'me'
@@ -243,26 +373,48 @@ if (isDesktop.value && users.length > 0) {
                                     >
                                         {{ m.text }}
                                     </div>
-                                    <div class="text-xs text-gray-400">{{ m.time }}</div>
+                                    <div class="text-xs text-right text-gray-400">{{ m.time }}</div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Input -->
-                        <div class="p-3 bg-white border-t flex items-center gap-2">
-                            <input
-                                v-model="newMessageText"
-                                @keypress="handleKeyPress"
-                                type="text"
-                                placeholder="Type a message..."
-                                class="flex-1 rounded-full bg-gray-100 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                            />
+                        <div class="bg-white px-3 py-2 border border-gray-200 shadow-sm flex items-end gap-1.5 m-4 transition-all duration-200" :class="messageInput?.scrollHeight > 50 ? 'rounded-2xl' : 'rounded-full'"
+                        >
                             <button
-                                @click="sendMessage"
-                                :disabled="!newMessageText.trim()"
-                                class="rounded-full bg-blue-500 text-white px-5 py-2.5 text-sm hover:bg-blue-600 transition disabled:opacity-50"
+                                @click="showAttachmentMenu = !showAttachmentMenu"
+                                class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
                             >
-                                Send
+                                <i class="fa-solid fa-paperclip text-lg text-gray-700"></i>
+                            </button>
+
+                            <button
+                                class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
+                            >
+                                <i class="fa-regular fa-face-smile text-xl text-gray-600"></i>
+                            </button>
+
+                            <textarea
+                                ref="messageInput"
+                                v-model="newMessageText"
+                                @input="autoResize"
+                                @keypress="handleKeyPress"
+                                rows="1"
+                                placeholder="Type a message..."
+                                class="message-textarea flex-1 px-2 py-1.5 text-[15px] leading-6 bg-transparent border-none outline-none resize-none focus:outline-none focus:ring-0"
+                            ></textarea>
+                            <button
+                                v-if="!newMessageText.trim()"
+                                class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-grey transition shadow-sm"
+                            >
+                                <i class="fa-solid fa-microphone text-xl text-gray-600"></i>
+                            </button>
+                            <button
+                                v-else
+                                @click="sendMessage"                                
+                                class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition shadow-sm"
+                            >
+                                <i class="fa-solid fa-paper-plane"></i>
                             </button>
                         </div>
                     </div>
@@ -301,7 +453,7 @@ if (isDesktop.value && users.length > 0) {
                                 class="flex items-center gap-3 p-4 mx-2 my-1 rounded-xl active:bg-gray-100 cursor-pointer transition"
                             >
                                 <div class="relative flex-shrink-0">
-                                    <div class="h-14 w-14 rounded-fullbg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-gray-700 font-semibold text-lg">
+                                    <div class="h-14 w-14 rounded-full bg-gradient-to-br from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white font-semibold text-lg">
                                         {{ getInitials(u.name) }}
                                     </div>
                                     <span
@@ -315,7 +467,29 @@ if (isDesktop.value && users.length > 0) {
                                         <div class="text-base font-semibold text-gray-900">
                                             {{ u.name }}
                                         </div>
-                                        <div class="text-xs text-gray-400">{{ u.time }}</div>
+                                        <div class="flex items-center gap-2">
+                                            <div
+                                                v-if="u.source === 'whatsapp'"
+                                                class="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center"
+                                            >
+                                                <i class="fa-brands fa-whatsapp text-green-600 text-sm"></i>
+                                            </div>
+        
+                                            <div
+                                                v-else-if="u.source === 'facebook'"
+                                                class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center"
+                                            >
+                                                <i class="fa-brands fa-facebook-messenger text-blue-600 text-sm"></i>
+                                            </div>
+        
+                                            <div
+                                                v-else
+                                                class="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center"
+                                            >
+                                                <i class="fa-solid fa-globe text-slate-600 text-xs"></i>
+                                            </div>
+                                            <div class="text-xs text-gray-400">{{ u.time }}</div>
+                                        </div>                                        
                                     </div>
                                     <div class="text-sm text-gray-500 truncate">
                                         {{ u.lastMessage }}
@@ -332,7 +506,7 @@ if (isDesktop.value && users.length > 0) {
                 </div>
 
                 <!-- Chat Area (shown when a user is selected) -->
-                <div v-else class="w-full h-full flex flex-col bg-gray-50">
+                <div v-else class="w-full h-full flex flex-col" style="background-image: url('/assets/images/chatbg.png'); background-repeat: repeat; background-size: 400px; background-color: #f8f9fb;">
                     <!-- Chat Header with Back Button -->
                     <div class="flex items-center gap-3 px-3 py-2 border-b bg-white">
                         <button 
@@ -358,7 +532,23 @@ if (isDesktop.value && users.length > 0) {
                                 {{ selectedUser.status === 'online' ? 'Online' : 'Offline' }}
                             </div>
                         </div>
-                        
+                        <button class="p-2 rounded-full hover:bg-gray-100"
+                            v-if="selectedUser.source === 'whatsapp'"                                    
+                        >
+                            <i class="fa-brands fa-whatsapp text-green-600"></i>
+                        </button>
+
+                        <button class="p-2 rounded-full hover:bg-gray-100"
+                            v-else-if="selectedUser.source === 'facebook'"                                
+                        >
+                            <i class="fa-brands fa-facebook-messenger text-blue-600"></i>
+                        </button>
+
+                        <button class="p-2 rounded-full hover:bg-gray-100"
+                            v-else                                    
+                        >
+                            <i class="fa-solid fa-globe text-slate-600"></i>
+                        </button>
                         <button class="p-2 rounded-full hover:bg-gray-100">
                             <i class="fa-solid fa-phone text-gray-600"></i>
                         </button>
@@ -368,14 +558,14 @@ if (isDesktop.value && users.length > 0) {
                     </div>
 
                     <!-- Messages -->
-                    <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll bg-gradient-to-b from-gray-50 to-gray-100">
+                    <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
                         <div
                             v-for="m in currentMessages"
                             :key="m.id"
                             class="flex"
                             :class="m.from === 'me' ? 'justify-end' : 'justify-start'"
                         >
-                            <div class="flex items-end gap-1 max-w-[85%]">
+                            <div class="max-w-[85%]">
                                 <div
                                     class="px-4 py-2.5 rounded-2xl text-sm"
                                     :class="m.from === 'me'
@@ -384,29 +574,45 @@ if (isDesktop.value && users.length > 0) {
                                 >
                                     {{ m.text }}
                                 </div>
-                                <div class="text-xs text-gray-400">{{ m.time }}</div>
+                                <div class="text-xs text-right text-gray-400">{{ m.time }}</div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Input -->
-                    <div class="p-3 bg-white border-t flex items-center gap-2">
-                        <button class="p-2 rounded-full hover:bg-gray-100">
-                            <i class="fa-regular fa-face-smile text-gray-600 text-xl"></i>
-                        </button>
-                        <input
-                            v-model="newMessageText"
-                            @keypress="handleKeyPress"
-                            type="text"
-                            placeholder="Type a message..."
-                            class="flex-1 rounded-full bg-gray-100 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                        />
+                    <div class="bg-white px-3 py-2 border border-gray-200 shadow-sm flex items-end gap-1.5 m-4 transition-all duration-200" :class="messageInput?.scrollHeight > 50 ? 'rounded-2xl' : 'rounded-full'">
                         <button
-                            @click="sendMessage"
-                            :disabled="!newMessageText.trim()"
-                            class="rounded-full bg-blue-500 text-white p-2.5 px-5 text-sm hover:bg-blue-600 transition disabled:opacity-50"
+                            @click="showAttachmentMenu = !showAttachmentMenu"
+                            class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
                         >
-                            Send
+                            <i class="fa-solid fa-paperclip text-lg text-gray-700"></i>
+                        </button>
+                        <button
+                                class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
+                            >
+                                <i class="fa-regular fa-face-smile text-xl text-gray-600"></i>
+                        </button>
+                        <textarea
+                            ref="messageInput"
+                            v-model="newMessageText"
+                            @input="autoResize"
+                            @keypress="handleKeyPress"
+                            rows="1"
+                            placeholder="Type a message..."
+                            class="message-textarea flex-1 px-2 py-1.5 text-[15px] leading-6 bg-transparent border-none outline-none resize-none focus:outline-none focus:ring-0"
+                        ></textarea>
+                        <button
+                            v-if="!newMessageText.trim()"
+                            class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-grey transition shadow-sm"
+                        >
+                            <i class="fa-solid fa-microphone text-xl text-gray-600"></i>
+                        </button>
+                        <button
+                            v-else
+                            @click="sendMessage"                                
+                            class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition shadow-sm"
+                        >
+                            <i class="fa-solid fa-paper-plane"></i>
                         </button>
                     </div>
                 </div>
@@ -430,6 +636,28 @@ if (isDesktop.value && users.length > 0) {
 }
 
 .custom-scroll::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+.message-textarea {
+    overflow-x: hidden;
+    scrollbar-width: thin;
+}
+
+.message-textarea::-webkit-scrollbar {
+    width: 2px;
+}
+
+.message-textarea::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.message-textarea::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+}
+
+.message-textarea::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
 }
 </style>
