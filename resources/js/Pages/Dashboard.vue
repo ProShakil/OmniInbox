@@ -1,6 +1,8 @@
 <script setup>
 import { Head, usePage, router } from '@inertiajs/vue3'
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import axios from 'axios'
+import 'emoji-picker-element'
 
 const page = usePage()
 const user = page.props.auth.user
@@ -10,41 +12,62 @@ const logout = () => {
 }
 
 // State
-const users = [
-    { id: 1, name: 'John Doe', status: 'online', lastSeen: 'Online', lastMessage: 'Hey there! 👋', time: '10:30 AM', source: 'whatsapp'},
-    { id: 2, name: 'Sarah Khan', status: 'offline', lastSeen: 'Last seen 5 min ago', lastMessage: 'See you tomorrow', time: '9:45 AM', source: 'facebook' },
-    { id: 3, name: 'Alex Smith', status: 'online', lastSeen: 'Online', lastMessage: 'Great job! 🔥', time: 'Yesterday',source: 'website' },
-    { id: 4, name: 'Emma Watson', status: 'offline', lastSeen: 'Last seen 1 hour ago', lastMessage: 'Thanks for the update', time: 'Yesterday', source: 'whatsapp' },
-    { id: 5, name: 'Michael Lee', status: 'online', lastSeen: 'Online', lastMessage: 'Call me when free', time: 'Yesterday', source: 'facebook' },
-]
-
-const selectedUser = ref(null)
-const messages = ref({}) // Store messages per user
 const newMessageText = ref('')
 const searchQuery = ref('')
 const isChatOpen = ref(false) // For mobile: shows chat or user list
 const messagesContainer = ref(null)
 const isDesktop = ref(window.innerWidth >= 768)
+const users = ref([])
+const pagination = ref(1)
+const hasMore = ref(true)
+const loading = ref(false)
+const selectedUser = ref(null)
+const messages = ref([])
+const loadingMessages = ref(false)
 
-// Initialize messages for each user
-users.forEach(u => {
-    if (!messages.value[u.id]) {
-        messages.value[u.id] = [
-            { id: 1, from: u.name, text: `Hi, I am ${u.name} 👋`, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-            { id: 2, from: 'me', text: 'Nice to meet you!', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) },
-        ]
+const loadConversations = async () => {
+
+    if (loading.value || !hasMore.value) return
+
+    loading.value = true
+
+    try {
+
+        const response = await axios.get(
+            route('admin.conversations', {
+                page: pagination.value
+            })
+        )
+
+        users.value.push(...response.data.data)
+
+        hasMore.value =
+            response.data.next_page_url !== null
+
+        pagination.value++
+
+    } catch (error) {
+
+        console.error(error)
+
+    } finally {
+
+        loading.value = false
     }
+}
+onMounted(() => {
+    loadConversations()
 })
+
 
 // Computed
 const filteredUsers = computed(() => {
-    if (!searchQuery.value) return users
-    return users.filter(u => u.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
-})
-
-const currentMessages = computed(() => {
-    if (!selectedUser.value) return []
-    return messages.value[selectedUser.value.id] || []
+    if (!searchQuery.value) return users.value
+    return users.value.filter(u =>
+        (u.contact?.name || '')
+            .toLowerCase()
+            .includes(searchQuery.value.toLowerCase())
+    )
 })
 
 // Watch for window resize
@@ -58,8 +81,28 @@ const handleResize = () => {
 window.addEventListener('resize', handleResize)
 
 // Methods
-const selectUser = (u) => {
+
+const loadMessages = async (conversationId) => {
+
+    try {
+
+        const response = await axios.get(
+            route('admin.messages', conversationId)
+        )
+
+        messages.value = response.data.messages
+
+    } catch (error) {
+
+        console.error(error)
+    }
+}
+
+
+const selectUser = async  (u) => {
     selectedUser.value = u
+    await loadMessages(u.id)
+    console.log(selectedUser.value)
     
     // On mobile: hide user list, show chat
     if (!isDesktop.value) {
@@ -79,31 +122,6 @@ const goBackToUserList = () => {
     selectedUser.value = null
 }
 
-const sendMessage = () => {
-    if (!newMessageText.value.trim() || !selectedUser.value) return
-    
-    const newMsg = {
-        id: Date.now(),
-        from: 'me',
-        text: newMessageText.value,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    }
-    
-    messages.value[selectedUser.value.id].push(newMsg)
-    newMessageText.value = ''
-    
-    // Scroll to bottom
-    nextTick(() => {
-        if (messageInput.value) {
-            messageInput.value.style.height = 'auto'
-        }
-        if (messagesContainer.value) {
-            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-        }
-    })
-    
-}
-
 const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
@@ -112,15 +130,17 @@ const handleKeyPress = (e) => {
 }
 
 const getInitials = (name) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase()
+
+    if (!name) return '?'
+
+    return name
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
 }
 
 // Set initial selected user for desktop
-if (isDesktop.value && users.length > 0) {
-    selectedUser.value = users[0]
-}
-
-const showAttachmentMenu = ref(false)
 
 const messageInput = ref(null)
 
@@ -182,6 +202,227 @@ onUnmounted(() => {
     clearInterval(clockInterval)
 })
 
+const timeAgo = (date) => {
+    const now = new Date()
+    const past = new Date(date)
+
+    const seconds = Math.floor((now - past) / 1000)
+
+    if (seconds < 60) {
+        return 'Just now'
+    }
+
+    const minutes = Math.floor(seconds / 60)
+
+    if (minutes < 60) {
+        return `${minutes} min ago`
+    }
+
+    const hours = Math.floor(minutes / 60)
+
+    if (hours < 24) {
+        return `${hours} hour${hours > 1 ? 's' : ''} ago`
+    }
+
+    const days = Math.floor(hours / 24)
+
+    if (days === 1) {
+        return 'Yesterday'
+    }
+
+    if (days < 7) {
+        return `${days} days ago`
+    }
+
+    const weeks = Math.floor(days / 7)
+
+    if (weeks < 5) {
+        return `${weeks} week${weeks > 1 ? 's' : ''} ago`
+    }
+
+    const months = Math.floor(days / 30)
+
+    if (months < 12) {
+        return `${months} month${months > 1 ? 's' : ''} ago`
+    }
+
+    const years = Math.floor(days / 365)
+
+    return `${years} year${years > 1 ? 's' : ''} ago`
+}
+
+const isImage = (file) => {
+
+    const ext = file.file_name.split('.').pop().toLowerCase()
+
+    return [
+        'jpg',
+        'jpeg',
+        'png',
+        'gif',
+        'webp',
+        'svg'
+    ].includes(ext)
+}
+
+const isAudio = (file) => {
+
+    const ext = file.file_name.split('.').pop().toLowerCase()
+
+    return [
+        'mp3',
+        'wav',
+        'ogg',
+        'm4a',
+        'aac'
+    ].includes(ext)
+}
+
+const isVideo = (file) => {
+
+    const ext = file.file_name.split('.').pop().toLowerCase()
+
+    return [
+        'mp4',
+        'webm',
+        'mov',
+        'avi',
+        'mkv'
+    ].includes(ext)
+}
+
+// Input Trigger
+const fileInput = ref(null)
+const selectedFiles = ref([])
+
+const handleFiles = (e) => {
+    selectedFiles.value = [...e.target.files]
+}
+
+// Emoji
+const showEmojiPicker = ref(false)
+
+const addEmoji = (emoji) => {
+    newMessageText.value += emoji.detail.unicode
+}
+
+// Voice Recording
+const isRecording = ref(false)
+const recordingTime = ref(0)
+
+let mediaRecorder = null
+let audioChunks = []
+let timer = null
+
+const startRecording = async () => {
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true
+    })
+
+    mediaRecorder = new MediaRecorder(stream)
+
+    audioChunks = []
+
+    mediaRecorder.ondataavailable = (e) => {
+        audioChunks.push(e.data)
+    }
+
+    mediaRecorder.start()
+
+    isRecording.value = true
+
+    recordingTime.value = 0
+
+    timer = setInterval(() => {
+        recordingTime.value++
+    }, 1000)
+}
+
+const cancelRecording = () => {
+
+    if (mediaRecorder) {
+
+        mediaRecorder.stop()
+    }
+
+    clearInterval(timer)
+
+    audioChunks = []
+
+    recordingTime.value = 0
+
+    isRecording.value = false
+}
+// Send
+
+const sendRecording = async () => {
+
+    const audioBlob = await stopRecording()
+
+    const formData = new FormData()
+
+    formData.append(
+        'audio',
+        audioBlob,
+        'voice.webm'
+    )
+
+    formData.append(
+        'conversation_id',
+        selectedUser.value.id
+    )
+
+    await axios.post(
+        route('chat.voice.store'),
+        formData
+    )
+
+    await loadMessages(
+        selectedUser.value.id
+    )
+
+    recordingTime.value = 0
+}
+
+// Normal Text
+
+const sendMessage = async () => {
+
+    const formData = new FormData()
+
+    formData.append(
+        'conversation_id',
+        selectedUser.value.id
+    )
+
+    formData.append(
+        'message',
+        newMessageText.value
+    )
+
+    selectedFiles.value.forEach(file => {
+
+        formData.append(
+            'attachments[]',
+            file
+        )
+
+    })
+
+    await axios.post(
+        route('chat.reply.store'),
+        formData
+    )
+
+    newMessageText.value = ''
+
+    selectedFiles.value = []
+
+    await loadMessages(
+        selectedUser.value.id
+    )
+}
 </script>
 
 <template>
@@ -262,10 +503,9 @@ onUnmounted(() => {
                             >
                                 <div class="relative flex-shrink-0">
                                     <div class="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white font-semibold">
-                                        {{ getInitials(u.name) }}
+                                        {{ getInitials(u.contact?.name) }}
                                     </div>
-                                    <span
-                                        v-if="u.status === 'online'"
+                                    <span                                        
                                         class="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-white"
                                     ></span>
                                 </div>
@@ -273,18 +513,18 @@ onUnmounted(() => {
                                 <div class="flex-1 min-w-0">
                                     <div class="flex items-center justify-between">
                                         <div class="text-sm font-semibold text-gray-900 truncate">
-                                            {{ u.name }}
+                                            {{ u.contact?.name }}
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <div
-                                                v-if="u.source === 'whatsapp'"
+                                                v-if="u.contact?.source === 'whatsapp'"
                                                 class="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center"
                                             >
                                                 <i class="fa-brands fa-whatsapp text-green-600 text-sm"></i>
                                             </div>
         
                                             <div
-                                                v-else-if="u.source === 'facebook'"
+                                                v-else-if="u.contact?.source === 'messenger'"
                                                 class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center"
                                             >
                                                 <i class="fa-brands fa-facebook-messenger text-blue-600 text-sm"></i>
@@ -296,11 +536,11 @@ onUnmounted(() => {
                                             >
                                                 <i class="fa-solid fa-globe text-slate-600 text-xs"></i>
                                             </div>
-                                            <div class="text-xs text-gray-400">{{ u.time }}</div>
+                                            <div class="text-xs text-gray-400"> {{ timeAgo(u.last_message_at) }}</div>
                                         </div>
                                     </div>
                                     <div class="text-xs text-gray-500 truncate">
-                                        {{ u.lastMessage }}
+                                        {{ u.latest_message?.message }}
                                     </div>
                                 </div>
                             </div>
@@ -315,29 +555,28 @@ onUnmounted(() => {
                         <div class="flex items-center gap-3 px-4 py-3 border-b bg-white">
                             <div class="relative">
                                 <div class="h-10 w-10 rounded-full bg-gradient-to-br from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white font-semibold">
-                                    {{ getInitials(selectedUser.name) }}
+                                    {{ getInitials(selectedUser.contact?.name) }}
                                 </div>
-                                <span
-                                    v-if="selectedUser.status === 'online'"
+                                <span                                    
                                     class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-white"
                                 ></span>
                             </div>                            
                             <div class="flex-1">
-                                <div class="text-sm font-semibold text-gray-900">{{ selectedUser.name }}</div>
-                                <div class="text-xs" :class="selectedUser.status === 'online' ? 'text-green-500' : 'text-gray-400'">
-                                    {{ selectedUser.status === 'online' ? 'Online' : 'Offline' }}
+                                <div class="text-sm font-semibold text-gray-900">{{ selectedUser.contact?.name }}</div>
+                                <div class="text-xs text-green-500">
+                                    Online
                                 </div>
                             </div>
                             
                             <div class="flex items-center gap-1">
                                 <button class="p-2 rounded-full hover:bg-gray-100"
-                                    v-if="selectedUser.source === 'whatsapp'"                                    
+                                    v-if="selectedUser.contact?.platform === 'whatsapp'"                                    
                                 >
                                     <i class="fa-brands fa-whatsapp text-green-600"></i>
                                 </button>
 
                                 <button class="p-2 rounded-full hover:bg-gray-100"
-                                    v-else-if="selectedUser.source === 'facebook'"                                
+                                    v-else-if="selectedUser.contact?.platform === 'messenger'"                                
                                 >
                                     <i class="fa-brands fa-facebook-messenger text-blue-600"></i>
                                 </button>
@@ -359,21 +598,74 @@ onUnmounted(() => {
                         <!-- Messages -->
                         <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
                             <div
-                                v-for="m in currentMessages"
+                                v-for="m in messages"
                                 :key="m.id"
                                 class="flex"
-                                :class="m.from === 'me' ? 'justify-end' : 'justify-start'"
+                                :class="m.sender_type  === 'admin' ? 'justify-end' : 'justify-start'"
                             >
                                 <div class=" max-w-[70%]">
                                     <div
                                         class="px-4 py-2 rounded-2xl text-sm"
-                                        :class="m.from === 'me'
+                                        :class="m.sender_type === 'admin'
                                             ? 'bg-blue-500 text-white rounded-br-md'
                                             : 'bg-white text-gray-800 rounded-bl-md shadow-sm'"
                                     >
-                                        {{ m.text }}
+                                        {{ m.message }}
                                     </div>
-                                    <div class="text-xs text-right text-gray-400">{{ m.time }}</div>
+                                    <div
+                                        v-if="m.attachments?.length"
+                                        class="mt-2 space-y-2"
+                                    >
+                                        <div
+                                            v-for="file in m.attachments"
+                                            :key="file.id"
+                                        >
+
+                                            <!-- Image -->
+                                            <img
+                                                v-if="isImage(file)"
+                                                :src="`/${file.file_path}`"
+                                                :alt="file.file_name"
+                                                class="max-w-[250px] rounded-lg border"
+                                            >
+
+                                            <!-- Audio -->
+                                            <audio
+                                                v-else-if="isAudio(file)"
+                                                controls
+                                                class="w-full max-w-[280px]"
+                                            >
+                                                <source :src="`/${file.file_path}`">
+                                            </audio>
+
+                                            <!-- Video -->
+                                            <video
+                                                v-else-if="isVideo(file)"
+                                                controls
+                                                class="max-w-[300px] rounded-lg border"
+                                            >
+                                                <source :src="`/${file.file_path}`">
+                                            </video>
+
+                                            <!-- Other Files -->
+                                            <a
+                                                v-else
+                                                :href="`/${file.file_path}`"
+                                                target="_blank"
+                                                class="flex items-center gap-2 p-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                            >
+                                                <i class="fa-solid fa-file-lines text-gray-600"></i>
+
+                                                <span class="text-xs truncate">
+                                                    {{ file.file_name }}
+                                                </span>
+
+                                                <i class="fa-solid fa-download ml-auto"></i>
+                                            </a>
+
+                                        </div>
+                                    </div>
+                                    <div class="text-xs text-right text-gray-400">{{ timeAgo(m.created_at) }}</div>
                                 </div>
                             </div>
                         </div>
@@ -381,20 +673,51 @@ onUnmounted(() => {
                         <!-- Input -->
                         <div class="bg-white px-3 py-2 border border-gray-200 shadow-sm flex items-end gap-1.5 m-4 transition-all duration-200" :class="messageInput?.scrollHeight > 50 ? 'rounded-2xl' : 'rounded-full'"
                         >
+                            <input
+                                ref="fileInput"
+                                type="file"
+                                class="hidden"
+                                multiple
+                                @change="handleFiles"
+                            />
                             <button
-                                @click="showAttachmentMenu = !showAttachmentMenu"
+                                @click="fileInput.click()"
                                 class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
                             >
                                 <i class="fa-solid fa-paperclip text-lg text-gray-700"></i>
                             </button>
 
                             <button
+                                @click="showEmojiPicker = !showEmojiPicker"
                                 class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
                             >
                                 <i class="fa-regular fa-face-smile text-xl text-gray-600"></i>
                             </button>
+                            <div
+                                v-if="showEmojiPicker"
+                                class="absolute bottom-20 left-[380px] z-50"
+                            >
+                                <emoji-picker @emoji-click="addEmoji"></emoji-picker>
+                            </div>
+                            <div
+                                v-if="selectedFiles.length"
+                                class="px-4 pt-2 flex flex-wrap gap-2"
+                            >
+                                <div
+                                    v-for="(file,index) in selectedFiles"
+                                    :key="index"
+                                    class="bg-gray-100 rounded-lg px-3 py-2 text-xs flex items-center gap-2"
+                                >
+                                    {{ file.name }}
+
+                                    <button @click="selectedFiles.splice(index,1)">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </div>
+                            </div>
 
                             <textarea
+                                v-if="!isRecording"
                                 ref="messageInput"
                                 v-model="newMessageText"
                                 @input="autoResize"
@@ -403,14 +726,63 @@ onUnmounted(() => {
                                 placeholder="Type a message..."
                                 class="message-textarea flex-1 px-2 py-1.5 text-[15px] leading-6 bg-transparent border-none outline-none resize-none focus:outline-none focus:ring-0"
                             ></textarea>
+                            
+                            <!-- Record -->
+                            <div
+                                v-else
+                                class="flex-1 flex items-center justify-between px-3"
+                            >
+                                <div class="flex items-center gap-3">
+
+                                    <span class="text-red-500 animate-pulse">
+                                        ●
+                                    </span>
+
+                                    <span class="text-sm font-medium">
+                                        Recording...
+                                    </span>
+
+                                    <span class="text-sm text-gray-500">
+                                        {{ recordingTime }}s
+                                    </span>
+
+                                </div>
+
+                            </div>
                             <button
-                                v-if="!newMessageText.trim()"
+                                v-if="!newMessageText.trim() && !isRecording"
+                                @click="startRecording"
                                 class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-grey transition shadow-sm"
                             >
                                 <i class="fa-solid fa-microphone text-xl text-gray-600"></i>
                             </button>
+                            <div
+                                v-if="isRecording"
+                                class="flex items-center gap-2"
+                            >
+
+                                <!-- Delete -->
+
+                                <button
+                                    @click="cancelRecording"
+                                    class="h-9 w-9 rounded-full bg-red-500 text-white"
+                                >
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+
+                                <!-- Send -->
+
+                                <button
+                                    @click="sendRecording"
+                                    class="h-9 w-9 rounded-full bg-blue-500 text-white"
+                                >
+                                    <i class="fa-solid fa-paper-plane"></i>
+                                </button>
+
+                            </div>
+
                             <button
-                                v-else
+                                v-if="newMessageText.trim() && !isRecording"
                                 @click="sendMessage"                                
                                 class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition shadow-sm"
                             >
@@ -454,10 +826,9 @@ onUnmounted(() => {
                             >
                                 <div class="relative flex-shrink-0">
                                     <div class="h-14 w-14 rounded-full bg-gradient-to-br from-blue-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white font-semibold text-lg">
-                                        {{ getInitials(u.name) }}
+                                        {{ getInitials(u.contact?.name) }}
                                     </div>
-                                    <span
-                                        v-if="u.status === 'online'"
+                                    <span                                        
                                         class="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-green-500 border-2 border-white"
                                     ></span>
                                 </div>
@@ -465,18 +836,18 @@ onUnmounted(() => {
                                 <div class="flex-1 min-w-0 border-b pb-3" :class="!filteredUsers.length ? 'border-b-0' : ''">
                                     <div class="flex items-center justify-between">
                                         <div class="text-base font-semibold text-gray-900">
-                                            {{ u.name }}
+                                            {{ u.contact?.name }}
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <div
-                                                v-if="u.source === 'whatsapp'"
+                                                v-if="u.contact?.source === 'whatsapp'"
                                                 class="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center"
                                             >
                                                 <i class="fa-brands fa-whatsapp text-green-600 text-sm"></i>
                                             </div>
         
                                             <div
-                                                v-else-if="u.source === 'facebook'"
+                                                v-else-if="u.contact?.source === 'messenger'"
                                                 class="h-6 w-6 rounded-full bg-blue-100 flex items-center justify-center"
                                             >
                                                 <i class="fa-brands fa-facebook-messenger text-blue-600 text-sm"></i>
@@ -488,11 +859,11 @@ onUnmounted(() => {
                                             >
                                                 <i class="fa-solid fa-globe text-slate-600 text-xs"></i>
                                             </div>
-                                            <div class="text-xs text-gray-400">{{ u.time }}</div>
+                                            <div class="text-xs text-gray-400">{{ timeAgo(u.last_message_at) }}</div>
                                         </div>                                        
                                     </div>
                                     <div class="text-sm text-gray-500 truncate">
-                                        {{ u.lastMessage }}
+                                        {{ u.latest_message?.message }}
                                     </div>
                                 </div>
                             </div>
@@ -518,28 +889,27 @@ onUnmounted(() => {
                         
                         <div class="relative">
                             <div class="h-10 w-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold">
-                                {{ getInitials(selectedUser.name) }}
+                                {{ getInitials(selectedUser.contact?.name) }}
                             </div>
-                            <span
-                                v-if="selectedUser.status === 'online'"
+                            <span                                
                                 class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-green-500 border-2 border-white"
                             ></span>
                         </div>
                         
                         <div class="flex-1">
-                            <div class="text-sm font-semibold text-gray-900">{{ selectedUser.name }}</div>
-                            <div class="text-xs" :class="selectedUser.status === 'online' ? 'text-green-500' : 'text-gray-400'">
-                                {{ selectedUser.status === 'online' ? 'Online' : 'Offline' }}
+                            <div class="text-sm font-semibold text-gray-900">{{ selectedUser.contact?.name }}</div>
+                            <div class="text-xs" text-green-500>
+                                Online
                             </div>
                         </div>
                         <button class="p-2 rounded-full hover:bg-gray-100"
-                            v-if="selectedUser.source === 'whatsapp'"                                    
+                            v-if="selectedUser.contact?.platform === 'whatsapp'"                                    
                         >
                             <i class="fa-brands fa-whatsapp text-green-600"></i>
                         </button>
 
                         <button class="p-2 rounded-full hover:bg-gray-100"
-                            v-else-if="selectedUser.source === 'facebook'"                                
+                            v-else-if="selectedUser.contact?.platform === 'messenger'"                                
                         >
                             <i class="fa-brands fa-facebook-messenger text-blue-600"></i>
                         </button>
@@ -560,38 +930,123 @@ onUnmounted(() => {
                     <!-- Messages -->
                     <div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
                         <div
-                            v-for="m in currentMessages"
+                            v-for="m in messages"
                             :key="m.id"
                             class="flex"
-                            :class="m.from === 'me' ? 'justify-end' : 'justify-start'"
+                            :class="m.sender_type === 'admin' ? 'justify-end' : 'justify-start'"
                         >
                             <div class="max-w-[85%]">
                                 <div
                                     class="px-4 py-2.5 rounded-2xl text-sm"
-                                    :class="m.from === 'me'
+                                    :class="m.sender_type === 'admin'
                                         ? 'bg-blue-500 text-white rounded-br-md'
                                         : 'bg-white text-gray-800 rounded-bl-md shadow-sm'"
                                 >
-                                    {{ m.text }}
+                                    {{ m.message }}
                                 </div>
-                                <div class="text-xs text-right text-gray-400">{{ m.time }}</div>
+                                <div
+                                    v-if="m.attachments?.length"
+                                    class="mt-2 space-y-2"
+                                >
+                                    <div
+                                        v-for="file in m.attachments"
+                                        :key="file.id"
+                                    >
+
+                                        <!-- Image -->
+                                        <img
+                                            v-if="isImage(file)"
+                                            :src="`/${file.file_path}`"
+                                            :alt="file.file_name"
+                                            class="max-w-[250px] rounded-lg border"
+                                        >
+
+                                        <!-- Audio -->
+                                        <audio
+                                            v-else-if="isAudio(file)"
+                                            controls
+                                            class="w-full max-w-[280px]"
+                                        >
+                                            <source :src="`/${file.file_path}`">
+                                        </audio>
+
+                                        <!-- Video -->
+                                        <video
+                                            v-else-if="isVideo(file)"
+                                            controls
+                                            class="max-w-[300px] rounded-lg border"
+                                        >
+                                            <source :src="`/${file.file_path}`">
+                                        </video>
+
+                                        <!-- Other Files -->
+                                        <a
+                                            v-else
+                                            :href="`/${file.file_path}`"
+                                            target="_blank"
+                                            class="flex items-center gap-2 p-2 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                        >
+                                            <i class="fa-solid fa-file-lines text-gray-600"></i>
+
+                                            <span class="text-xs truncate">
+                                                {{ file.file_name }}
+                                            </span>
+
+                                            <i class="fa-solid fa-download ml-auto"></i>
+                                        </a>
+
+                                    </div>
+                                </div>
+                                <div class="text-xs text-right text-gray-400">{{ timeAgo(m.created_at) }}</div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Input -->
                     <div class="bg-white px-3 py-2 border border-gray-200 shadow-sm flex items-end gap-1.5 m-4 transition-all duration-200" :class="messageInput?.scrollHeight > 50 ? 'rounded-2xl' : 'rounded-full'">
+                        <input
+                            ref="fileInput"
+                            type="file"
+                            class="hidden"
+                            multiple
+                            @change="handleFiles"
+                        />
                         <button
-                            @click="showAttachmentMenu = !showAttachmentMenu"
+                            @click="fileInput.click()"
                             class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
                         >
                             <i class="fa-solid fa-paperclip text-lg text-gray-700"></i>
                         </button>
                         <button
-                                class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
-                            >
-                                <i class="fa-regular fa-face-smile text-xl text-gray-600"></i>
+                            @click="showEmojiPicker = !showEmojiPicker"
+                            class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-gray-100 transition text-gray-500"
+                        >
+                            <i class="fa-regular fa-face-smile text-xl text-gray-600"></i>
                         </button>
+                        <div
+                            v-if="selectedFiles.length"
+                            class="px-4 pt-2 flex flex-wrap gap-2"
+                        >
+                            <div
+                                v-for="(file,index) in selectedFiles"
+                                :key="index"
+                                class="bg-gray-100 rounded-lg px-3 py-2 text-xs flex items-center gap-2"
+                            >
+                                {{ file.name }}
+
+                                <button @click="selectedFiles.splice(index,1)">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div
+                            v-if="showEmojiPicker"
+                            class="absolute bottom-20 left-4 z-50"
+                        >
+                            <emoji-picker @emoji-click="addEmoji"></emoji-picker>
+                        </div>
+                        
                         <textarea
                             ref="messageInput"
                             v-model="newMessageText"

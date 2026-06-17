@@ -21,6 +21,7 @@
     },
     "dependencies": {
         "@fortawesome/fontawesome-free": "^7.2.0",
-        "@material-symbols/font-400": "^0.45.1"
+        "@material-symbols/font-400": "^0.45.1",
+        "emoji-picker-element": "^1.29.1"
     }
 }
