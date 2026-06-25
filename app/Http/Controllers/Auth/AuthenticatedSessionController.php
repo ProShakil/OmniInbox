@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -27,13 +28,41 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
+    // public function store(LoginRequest $request): RedirectResponse
+    // {
+    //     $request->authenticate();
+
+    //     $request->session()->regenerate();
+
+    //     return redirect()->intended(route('dashboard', absolute: false));
+    // }
     public function store(LoginRequest $request): RedirectResponse
     {
-        $request->authenticate();
+        $response = Http::post(
+            config('services.api_url') . '/api/login',
+            [
+                'email' => $request->email,
+                'password' => $request->password,
+            ]
+        ); 
+
+        if (! $response->successful()) {
+            return back()->withErrors([
+                'email' => 'Email or Password incorrect',
+            ]);
+        }
+
+        $data = $response->json();
+
+        session([
+            'logged_in' => true,
+            'admin' => $data['user'],
+            'token' => $data['token'] ?? null,
+        ]);
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->route('dashboard');
     }
 
     /**

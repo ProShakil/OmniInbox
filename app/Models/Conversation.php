@@ -5,9 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 class Conversation extends Model
-{
-    protected $connection = 'chat_db';
-    
+{    
     protected $guarded = [];
 
     public function contact()

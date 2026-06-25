@@ -54,35 +54,32 @@ class backendController extends Controller
     public function storeVoice(Request $request)
     {
         $request->validate([
-            'conversation_id' => ['required', 'exists:chat_db.conversations,id'],
+            'conversation_id' => ['required', 'exists:conversations,id'],
             'audio' => ['required', 'file']
         ]);
-        DB::connection('chat_db')->transaction(function () use ($request) {
-            $message = Message::create([
-                'conversation_id' => $request->conversation_id,
-                'sender_type'    => 'admin',
-                'platform'       => 'website',
-                'message'        => null,
-            ]);
+        $message = Message::create([
+            'conversation_id' => $request->conversation_id,
+            'sender_type'    => 'admin',
+            'platform'       => 'website',
+            'message'        => null,
+        ]);
 
-            $file = $request->file('audio');
+        $file = $request->file('audio');
 
-            $fileName = time() . '_' . $file->getClientOriginalName();
+        $fileName = time() . '_' . $file->getClientOriginalName();
 
-            $file->move(
-                public_path('chat/voice'),
-                $fileName
-            );
+        $file->move(
+            public_path('chat/voice'),
+            $fileName
+        );
 
-            MessageAttachment::create([
-                'message_id' => $message->id,
-                'file_name'  => $file->getClientOriginalName(),
-                'file_path'  => 'chat/voice/' . $fileName,
-                'file_type'  => $file->getMimeType(),
-                'file_size'  => $file->getSize(),
-            ]);
-
-        });
+        MessageAttachment::create([
+            'message_id' => $message->id,
+            'file_name'  => $file->getClientOriginalName(),
+            'file_path'  => 'chat/voice/' . $fileName,
+            'file_type'  => $file->getMimeType(),
+            'file_size'  => $file->getSize(),
+        ]);
 
         return response()->json([
             'success' => true
@@ -92,7 +89,7 @@ class backendController extends Controller
     public function storeReply(Request $request)
     {
         $request->validate([
-            'conversation_id' => ['required', 'exists:chat_db.conversations,id'],
+            'conversation_id' => ['required', 'exists:conversations,id'],
             'message'         => ['nullable', 'string'],
             'attachments.*'   => ['nullable', 'file']
         ]);

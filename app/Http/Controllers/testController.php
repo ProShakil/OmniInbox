@@ -29,99 +29,95 @@ class testController extends Controller
             'message'    => 'required|string',
             'attachment' => 'nullable|file|max:10240',
         ]);
+        /*
+        |--------------------------------------------------------------------------
+        | Contact
+        |--------------------------------------------------------------------------
+        */
 
-        DB::connection('chat_db')->transaction(function () use ($request) {
+        $contact = Contact::where('platform', $request->platform)
+            ->where('phone', $request->phone)
+            ->first();
 
-            /*
-            |--------------------------------------------------------------------------
-            | Contact
-            |--------------------------------------------------------------------------
-            */
+        if (!$contact) {
 
-            $contact = Contact::where('platform', $request->platform)
-                ->where('phone', $request->phone)
-                ->first();
-
-            if (!$contact) {
-
-                $contact = Contact::create([
-                    'name'        => $request->name,
-                    'phone'       => $request->phone,
-                    'email'       => $request->email,
-                    'platform'    => $request->platform,
-                    'platform_id' => null,
-                ]);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Conversation
-            |--------------------------------------------------------------------------
-            */
-
-            $conversation = Conversation::firstOrCreate(
-                [
-                    'contact_id' => $contact->id,
-                ],
-                [
-                    'status'          => 'open',
-                    'last_message_at' => now(),
-                ]
-            );
-
-            /*
-            |--------------------------------------------------------------------------
-            | Message
-            |--------------------------------------------------------------------------
-            */
-
-            $message = Message::create([
-                'conversation_id' => $conversation->id,
-                'sender_type'     => 'customer',
-                'platform'        => $request->platform,
-                'message'         => $request->message,
+            $contact = Contact::create([
+                'name'        => $request->name,
+                'phone'       => $request->phone,
+                'email'       => $request->email,
+                'platform'    => $request->platform,
+                'platform_id' => null,
             ]);
+        }
 
-            /*
-            |--------------------------------------------------------------------------
-            | Attachment
-            |--------------------------------------------------------------------------
-            */
+        /*
+        |--------------------------------------------------------------------------
+        | Conversation
+        |--------------------------------------------------------------------------
+        */
 
-            if ($request->hasFile('attachment')) {
-
-                $file = $request->file('attachment');
-
-                $originalName = $file->getClientOriginalName();
-                $fileType = $file->getClientOriginalExtension();
-                $fileSize = $file->getSize();
-                $uploadPath = public_path('chat');
-                if (!file_exists($uploadPath)) {
-                    mkdir($uploadPath, 0755, true);
-                }
-                $filename = time() . '_' . uniqid() . '.' . $fileType;
-                $file->move($uploadPath, $filename);
-
-                MessageAttachment::create([
-                    'message_id' => $message->id,
-                    'file_name'  => $originalName,
-                    'file_path'  => 'chat/' . $filename,
-                    'file_type'  => $fileType,
-                    'file_size'  => $fileSize,
-                ]);
-            }
-        
-            /*
-            |--------------------------------------------------------------------------
-            | Update Conversation
-            |--------------------------------------------------------------------------
-            */
-
-            $conversation->update([
+        $conversation = Conversation::firstOrCreate(
+            [
+                'contact_id' => $contact->id,
+            ],
+            [
+                'status'          => 'open',
                 'last_message_at' => now(),
-            ]);
-        });
+            ]
+        );
 
+        /*
+        |--------------------------------------------------------------------------
+        | Message
+        |--------------------------------------------------------------------------
+        */
+
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'sender_type'     => 'customer',
+            'platform'        => $request->platform,
+            'message'         => $request->message,
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Attachment
+        |--------------------------------------------------------------------------
+        */
+
+        if ($request->hasFile('attachment')) {
+
+            $file = $request->file('attachment');
+
+            $originalName = $file->getClientOriginalName();
+            $fileType = $file->getClientOriginalExtension();
+            $fileSize = $file->getSize();
+            $uploadPath = public_path('chat');
+            if (!file_exists($uploadPath)) {
+                mkdir($uploadPath, 0755, true);
+            }
+            $filename = time() . '_' . uniqid() . '.' . $fileType;
+            $file->move($uploadPath, $filename);
+
+            MessageAttachment::create([
+                'message_id' => $message->id,
+                'file_name'  => $originalName,
+                'file_path'  => 'chat/' . $filename,
+                'file_type'  => $fileType,
+                'file_size'  => $fileSize,
+            ]);
+        }
+    
+        /*
+        |--------------------------------------------------------------------------
+        | Update Conversation
+        |--------------------------------------------------------------------------
+        */
+
+        $conversation->update([
+            'last_message_at' => now(),
+        ]);
+        
         return back()->with(
             'success',
             'Message sent successfully.'

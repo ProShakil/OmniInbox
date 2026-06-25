@@ -16,8 +16,10 @@ use Inertia\Inertia;
 //         'phpVersion' => PHP_VERSION,
 //     ]);
 // });
-Route::get('/', [AuthenticatedSessionController::class, 'create'])->name('login');
 
+Route::middleware('api.guest')->group(function () {
+    Route::get('/', [AuthenticatedSessionController::class, 'create'])->name('login');
+});
 Route::get('/test', [testController::class, 'test'])->name('test');
 Route::post('/chat/store', [testController::class, 'store'])->name('chat.store');
 Route::get('/chat/conversations', [testController::class, 'conversations'])->name('chat.conversations');
@@ -27,9 +29,9 @@ Route::get('/chat/conversation/{id}', [testController::class, 'conversation'])->
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware('api.auth')->name('dashboard');
 
-Route::middleware('auth')->group(function () {
+Route::middleware('api.auth')->group(function () {
     Route::get('/conversations', [backendController::class, 'conversations'])->name('admin.conversations');
     Route::get('/conversations/{conversation}', [BackendController::class, 'conversationMessages'])->name('admin.messages');
     Route::post('/chat/voice', [BackendController::class, 'storeVoice'])->name('chat.voice.store');

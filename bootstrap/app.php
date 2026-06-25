@@ -16,6 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
+        $middleware->alias([
+            'api.auth' => \App\Http\Middleware\AuthenticateApiUser::class,
+            'api.guest' => \App\Http\Middleware\RedirectIfAuthenticatedApi::class,
+        ]);
 
         //
     })
