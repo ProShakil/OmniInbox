@@ -77,7 +77,7 @@ class testController extends Controller
 
             $message = Message::create([
                 'conversation_id' => $conversation->id,
-                'sender_type'     => 'admin',
+                'sender_type'     => 'customer',
                 'platform'        => $request->platform,
                 'message'         => $request->message,
             ]);

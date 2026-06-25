@@ -355,7 +355,29 @@ const cancelRecording = () => {
     isRecording.value = false
 }
 // Send
+const scrollToBottom = () => {
 
+    nextTick(() => {
+
+        if (messagesContainer.value) {
+
+            messagesContainer.value.scrollTop =
+                messagesContainer.value.scrollHeight
+        }
+
+    })
+}
+
+const refreshConversations = async () => {
+
+    users.value = []
+
+    pagination.value = 1
+
+    hasMore.value = true
+
+    await loadConversations()
+}
 const sendRecording = async () => {
 
     const audioBlob = await stopRecording()
@@ -381,7 +403,8 @@ const sendRecording = async () => {
     await loadMessages(
         selectedUser.value.id
     )
-
+    await refreshConversations()
+    scrollToBottom()
     recordingTime.value = 0
 }
 
@@ -422,6 +445,8 @@ const sendMessage = async () => {
     await loadMessages(
         selectedUser.value.id
     )
+    await refreshConversations()
+    scrollToBottom()
 }
 </script>
 
@@ -1048,6 +1073,7 @@ const sendMessage = async () => {
                         </div>
                         
                         <textarea
+                            v-if="!isRecording"
                             ref="messageInput"
                             v-model="newMessageText"
                             @input="autoResize"
@@ -1056,14 +1082,62 @@ const sendMessage = async () => {
                             placeholder="Type a message..."
                             class="message-textarea flex-1 px-2 py-1.5 text-[15px] leading-6 bg-transparent border-none outline-none resize-none focus:outline-none focus:ring-0"
                         ></textarea>
+                        <!-- Record -->
+                        <div
+                            v-else
+                            class="flex-1 flex items-center justify-between px-3"
+                        >
+                            <div class="flex items-center gap-3">
+
+                                <span class="text-red-500 animate-pulse">
+                                    ●
+                                </span>
+
+                                <span class="text-sm font-medium">
+                                    Recording...
+                                </span>
+
+                                <span class="text-sm text-gray-500">
+                                    {{ recordingTime }}s
+                                </span>
+
+                            </div>
+
+                        </div>
                         <button
-                            v-if="!newMessageText.trim()"
+                            v-if="!newMessageText.trim() && !isRecording"
+                            @click="startRecording"
                             class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full hover:bg-grey transition shadow-sm"
                         >
                             <i class="fa-solid fa-microphone text-xl text-gray-600"></i>
                         </button>
+                        <div
+                            v-if="isRecording"
+                            class="flex items-center gap-2"
+                        >
+
+                            <!-- Delete -->
+
+                            <button
+                                @click="cancelRecording"
+                                class="h-9 w-9 rounded-full bg-red-500 text-white"
+                            >
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+
+                            <!-- Send -->
+
+                            <button
+                                @click="sendRecording"
+                                class="h-9 w-9 rounded-full bg-blue-500 text-white"
+                            >
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+
+                        </div>
+
                         <button
-                            v-else
+                            v-if="newMessageText.trim() && !isRecording"
                             @click="sendMessage"                                
                             class="h-9 w-9 shrink-0 flex items-center justify-center rounded-full bg-blue-500 text-white hover:bg-blue-600 transition shadow-sm"
                         >
@@ -1077,42 +1151,42 @@ const sendMessage = async () => {
 </template>
 
 <style scoped>
-.custom-scroll::-webkit-scrollbar {
-    width: 5px;
-}
+    .custom-scroll::-webkit-scrollbar {
+        width: 5px;
+    }
 
-.custom-scroll::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
+    .custom-scroll::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
 
-.custom-scroll::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 10px;
-}
+    .custom-scroll::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 10px;
+    }
 
-.custom-scroll::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
 
-.message-textarea {
-    overflow-x: hidden;
-    scrollbar-width: thin;
-}
+    .message-textarea {
+        overflow-x: hidden;
+        scrollbar-width: thin;
+    }
 
-.message-textarea::-webkit-scrollbar {
-    width: 2px;
-}
+    .message-textarea::-webkit-scrollbar {
+        width: 2px;
+    }
 
-.message-textarea::-webkit-scrollbar-track {
-    background: transparent;
-}
+    .message-textarea::-webkit-scrollbar-track {
+        background: transparent;
+    }
 
-.message-textarea::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
-    border-radius: 999px;
-}
+    .message-textarea::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 999px;
+    }
 
-.message-textarea::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
-}
+    .message-textarea::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
 </style>
